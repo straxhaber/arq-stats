@@ -217,17 +217,17 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     display_group.add_argument(
         "-s",
-        "--summary",
-        dest="summary",
+        "--stats",
+        dest="stats",
         action="store_true",
         default=None,
-        help="Show summary (default if interactive)",
+        help="Show stats (default if interactive)",
     )
     display_group.add_argument(
-        "--no-summary",
-        dest="summary",
+        "--no-stats",
+        dest="stats",
         action="store_false",
-        help="Hide summary (default if piped)",
+        help="Hide stats (default if piped)",
     )
     display_group.add_argument("--top", metavar="N", type=int, default=25, help="Top N rows")
     display_group.add_argument(
@@ -394,7 +394,7 @@ def emit_summary(
     label_width = max(len(label) for label, _ in items)
     for label, value in items:
         print(
-            f"{value:>{value_width},}  {label:>{label_width}}",
+            f"{value:>{value_width},}  {label:<{label_width}}",
             file=sys.stderr,
         )
 
@@ -563,8 +563,8 @@ def main(argv: Sequence[str]) -> int:
         output_text = render_table(output_rows, include_header=not args.no_header, columns=columns)
         emit_table_output(output_text)
 
-    show_summary = args.summary if args.summary is not None else sys.stderr.isatty()
-    if show_summary:
+    show_stats = args.stats if args.stats is not None else sys.stderr.isatty()
+    if show_stats:
         emit_summary(
             logs_scanned=len(files),
             parseable_lines=parseable_lines,
