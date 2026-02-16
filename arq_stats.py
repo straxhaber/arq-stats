@@ -376,6 +376,29 @@ def to_rows(
     ]
 
 
+def emit_summary(
+    logs_scanned: int,
+    parseable_lines: int,
+    matched_events: int,
+    unique_files: int,
+    rows_shown: int,
+) -> None:
+    items = [
+        ("scanned logs", logs_scanned),
+        ("parseable log lines", parseable_lines),
+        ("matched events", matched_events),
+        ("unique files", unique_files),
+        ("rows shown", rows_shown),
+    ]
+    value_width = max(len(f"{value:,}") for _, value in items)
+    label_width = max(len(label) for label, _ in items)
+    for label, value in items:
+        print(
+            f"{value:>{value_width},}  {label:>{label_width}}",
+            file=sys.stderr,
+        )
+
+
 def main(argv: Sequence[str]) -> int:
     args = parse_args(argv)
 
@@ -542,16 +565,12 @@ def main(argv: Sequence[str]) -> int:
 
     show_summary = args.summary if args.summary is not None else sys.stderr.isatty()
     if show_summary:
-        unique_post_filter = len(filtered)
-        shown_rows = len(top)
-        print(
-            (
-                f"Scanned logs: {len(files):,}, parseable log lines: {parseable_lines:,}, "
-                f"matched events: {matched_lines:,}, "
-                f"unique files: {unique_post_filter:,}, "
-                f"rows shown: {shown_rows:,}"
-            ),
-            file=sys.stderr,
+        emit_summary(
+            logs_scanned=len(files),
+            parseable_lines=parseable_lines,
+            matched_events=matched_lines,
+            unique_files=len(filtered),
+            rows_shown=len(top),
         )
 
     return 0
