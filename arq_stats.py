@@ -23,7 +23,7 @@ OUTPUT_COLUMNS = ["count", "size", "first_seen", "last_seen", "path"]
 RIGHT_ALIGN_COLUMNS = {"count", "size"}
 LINE_RE = re.compile(
     r"^(?P<date>\d{2}-[A-Za-z]{3}-\d{4}) (?P<time>\d{2}:\d{2}:\d{2}) "
-    r"(?P<tz>[A-Za-z]{2,6}) (?P<message>.*)$"
+    r"(?P<tz>[A-Za-z]{2,6}(?:[+-]\d{1,2})?) (?P<message>.*)$"
 )
 LOG_NAME_RE = re.compile(r"^backup-(\d+)-")
 SIZE_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([BKMGTP]?)\s*$", re.IGNORECASE)
@@ -376,7 +376,7 @@ def to_rows(
     ]
 
 
-def emit_summary(
+def emit_stats(
     logs_scanned: int,
     parseable_lines: int,
     matched_events: int,
@@ -565,7 +565,7 @@ def main(argv: Sequence[str]) -> int:
 
     show_stats = args.stats if args.stats is not None else sys.stderr.isatty()
     if show_stats:
-        emit_summary(
+        emit_stats(
             logs_scanned=len(files),
             parseable_lines=parseable_lines,
             matched_events=matched_lines,
