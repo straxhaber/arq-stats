@@ -20,8 +20,8 @@ from typing import Iterable, Sequence
 DEFAULT_LOG_DIR = Path("/Library/Application Support/ArqAgent/logs/backup")
 UPLOADED_PREFIX = "Uploaded "
 BACKUP_PLAN_PREFIX = "Backup plan: "
-OUTPUT_COLUMNS = ["count", "size", "first_seen", "last_seen", "path"]
-RIGHT_ALIGN_COLUMNS = {"count", "size"}
+OUTPUT_COLUMNS = ["count", "size", "space", "first_seen", "last_seen", "path"]
+RIGHT_ALIGN_COLUMNS = {"count", "size", "space"}
 COLUMN_LABELS = {"count": "num"}
 PROGRESS_LABEL_WIDTH = 14
 LINE_RE = re.compile(
@@ -278,10 +278,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     display_group.add_argument(
         "--sort",
-        choices=("count", "size", "path"),
+        choices=("count", "size", "space", "path"),
         metavar="KEY",
         default="count",
-        help="Sort by: count|size|path",
+        help="Sort by: count|size|space|path",
     )
     display_group.add_argument("--no-header", action="store_true", help="Hide header row")
     display_group.add_argument(
@@ -292,7 +292,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     display_group.add_argument(
         "--show-bytes",
         action="store_true",
-        help="Show raw byte sizes instead of human-readable sizes",
+        help="Show raw byte values for size/space instead of human-readable sizes",
     )
     return parser.parse_args(argv)
 
@@ -300,7 +300,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 def output_columns(show_dates: bool) -> list[str]:
     if show_dates:
         return OUTPUT_COLUMNS
-    return ["count", "size", "path"]
+    return ["count", "size", "space", "path"]
 
 
 def render_table(rows: list[dict[str, str | int]], include_header: bool, columns: list[str]) -> str:
@@ -425,6 +425,15 @@ def to_rows(
                     str(size_cache[st.path])
                     if show_bytes
                     else human_size(size_cache[st.path])
+                )
+                if size_cache.get(st.path) is not None
+                else "MISSING"
+            ),
+            "space": (
+                (
+                    str(size_cache[st.path] * st.count)
+                    if show_bytes
+                    else human_size(size_cache[st.path] * st.count)
                 )
                 if size_cache.get(st.path) is not None
                 else "MISSING"
@@ -559,7 +568,7 @@ def main(argv: Sequence[str]) -> int:
 
     filtered = [s for s in stats_by_path.values() if s.count >= args.min_count]
     use_size_filters = args.min_size is not None or args.min_space is not None
-    needs_size_cache = use_size_filters or args.sort == "size"
+    needs_size_cache = use_size_filters or args.sort in ("size", "space")
     size_cache: dict[str, int | None] = {}
 
     if needs_size_cache:
@@ -598,11 +607,19 @@ def main(argv: Sequence[str]) -> int:
         filtered.sort(key=lambda s: (-s.count, s.path))
     elif args.sort == "path":
         filtered.sort(key=lambda s: s.path)
-    else:
+    elif args.sort == "size":
         filtered.sort(
             key=lambda s: (
                 1 if size_cache.get(s.path) is None else 0,
                 -(size_cache[s.path] or 0),
+                s.path,
+            )
+        )
+    else:
+        filtered.sort(
+            key=lambda s: (
+                1 if size_cache.get(s.path) is None else 0,
+                -((size_cache[s.path] or 0) * s.count),
                 s.path,
             )
         )
