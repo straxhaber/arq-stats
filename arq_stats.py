@@ -218,18 +218,27 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
     filter_group.add_argument("--max-logs", metavar="N", type=int, default=1000, help="Search newest N logs (0=all; default: 1,000)")
     filter_group.add_argument(
-        "--since",
-        metavar="DATETIME",
+        "--since-log",
+        metavar="DT",
         type=parse_user_datetime,
+        dest="since_log",
         default=None,
         help="Min log time (default: all; ignores time zones; YYYY-MM-DD[ HH:MM])",
     )
     filter_group.add_argument(
-        "--until",
-        metavar="DATETIME",
+        "--until-log",
+        metavar="DT",
         type=parse_user_datetime,
+        dest="until_log",
         default=None,
         help="Max log time (default: all; ignores time zones; YYYY-MM-DD[ HH:MM])",
+    )
+    filter_group.add_argument(
+        "--seen-since",
+        metavar="DT",
+        type=parse_user_datetime,
+        default=None,
+        help="Min last-seen upload time (default: all; ignores time zones; YYYY-MM-DD[ HH:MM])",
     )
     filter_group.add_argument("--min-count", metavar="N", type=int, default=1, help="Min uploads (default: all)")
     filter_group.add_argument(
@@ -515,23 +524,28 @@ def main(argv: Sequence[str]) -> int:
     plan_filter = args.plan.strip() if args.plan else None
     filter_is_guid = bool(plan_filter and GUID_RE.match(plan_filter))
 
-    files, skipped_unparseable = iter_log_files(args.log_dir, args.since, args.until)
+    files, skipped_unparseable = iter_log_files(args.log_dir, args.since_log, args.until_log)
     if args.max_logs > 0:
         files = files[-args.max_logs :]
 
-    if args.since or args.until:
+    if args.since_log or args.until_log:
         print(
-            "Warning: --since/--until filter by log timestamp only and ignore upload timestamps/time zones.",
+            "Warning: --since-log/--until-log filter by log timestamp only and ignore upload timestamps/time zones.",
             file=sys.stderr,
         )
         if skipped_unparseable:
             print(
                 (
                     f"Warning: skipped {skipped_unparseable} log(s) with unparseable timestamps "
-                    "while applying --since/--until."
+                    "while applying --since-log/--until-log."
                 ),
                 file=sys.stderr,
             )
+    if args.seen_since:
+        print(
+            "Warning: --seen-since uses upload timestamps and ignores time zones.",
+            file=sys.stderr,
+        )
 
     stats_by_path: dict[str, FileStats] = {}
     matched_lines = 0
@@ -587,6 +601,12 @@ def main(argv: Sequence[str]) -> int:
         sys.stderr.write("\n")
 
     filtered = [s for s in stats_by_path.values() if s.count >= args.min_count]
+    if args.seen_since is not None:
+        filtered = [
+            s
+            for s in filtered
+            if s.last_seen is not None and s.last_seen >= args.seen_since
+        ]
     use_size_filters = args.min_size is not None or args.min_space is not None
     needs_size_cache = use_size_filters or args.sort in ("size", "space")
     size_cache: dict[str, int | None] = {}
