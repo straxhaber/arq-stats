@@ -41,6 +41,7 @@ SIZE_MULTIPLIERS = {
     "T": 1000**4,
     "P": 1000**5,
 }
+OUT_UNITS = ("AUTO", "B", "K", "M", "G", "T", "P")
 
 
 @dataclass
@@ -79,6 +80,15 @@ def parse_size_bytes(value: str) -> int:
     number = float(m.group(1))
     suffix = m.group(2).upper() or "B"
     return int(number * SIZE_MULTIPLIERS[suffix])
+
+
+def parse_out_unit(value: str) -> str:
+    unit = value.strip().upper()
+    if unit in OUT_UNITS:
+        return unit
+    raise argparse.ArgumentTypeError(
+        f"Invalid unit '{value}'. Use one of: {','.join(OUT_UNITS)}"
+    )
 
 
 def parse_line(line: str) -> tuple[datetime, str] | None:
@@ -268,7 +278,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_false",
         help="Hide stats (default if piped)",
     )
+    display_group.add_argument("--no-header", action="store_true", help="Hide header row")
     display_group.add_argument("--top", metavar="N", type=int, default=25, help="Top N rows")
+    display_group.add_argument(
+        "--sort",
+        choices=("count", "size", "space", "path"),
+        metavar="KEY",
+        default="count",
+        help="Sort by: count|size|space|path",
+    )
     display_group.add_argument(
         "--format",
         choices=("table", "json", "csv"),
@@ -277,22 +295,16 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Output format: table|json|csv",
     )
     display_group.add_argument(
-        "--sort",
-        choices=("count", "size", "space", "path"),
-        metavar="KEY",
-        default="count",
-        help="Sort by: count|size|space|path",
+        "--out-unit",
+        metavar="UNIT",
+        type=parse_out_unit,
+        default="AUTO",
+        help="Output unit: AUTO|B|K|M|G|T|P (display only)",
     )
-    display_group.add_argument("--no-header", action="store_true", help="Hide header row")
     display_group.add_argument(
         "--show-dates",
         action="store_true",
         help="Show date columns",
-    )
-    display_group.add_argument(
-        "--show-bytes",
-        action="store_true",
-        help="Show raw byte values for size/space instead of human-readable sizes",
     )
     return parser.parse_args(argv)
 
@@ -383,7 +395,19 @@ def emit_table_output(text: str) -> None:
     sys.stdout.write(text)
 
 
-def human_size(num_bytes: int) -> str:
+def human_size(num_bytes: int, out_unit: str = "AUTO") -> str:
+    if out_unit != "AUTO":
+        size = num_bytes / SIZE_MULTIPLIERS[out_unit]
+        if out_unit == "B":
+            return f"{int(size):,} B"
+        if size < 10:
+            one_decimal = round(size, 1)
+            if one_decimal < 10:
+                return f"{one_decimal:.1f} {out_unit}"
+            size = one_decimal
+        rounded_int = int(size + 0.5)
+        return f"{rounded_int:,} {out_unit}"
+
     units = ["B", "K", "M", "G", "T", "P"]
     size = float(num_bytes)
     unit_idx = 0
@@ -415,25 +439,21 @@ def human_size(num_bytes: int) -> str:
 
 
 def to_rows(
-    stats: Iterable[FileStats], size_cache: dict[str, int | None], show_bytes: bool
+    stats: Iterable[FileStats], size_cache: dict[str, int | None], out_unit: str
 ) -> list[dict[str, str | int]]:
     return [
         {
             "count": st.count,
             "size": (
                 (
-                    str(size_cache[st.path])
-                    if show_bytes
-                    else human_size(size_cache[st.path])
+                    human_size(size_cache[st.path], out_unit=out_unit)
                 )
                 if size_cache.get(st.path) is not None
                 else "MISSING"
             ),
             "space": (
                 (
-                    str(size_cache[st.path] * st.count)
-                    if show_bytes
-                    else human_size(size_cache[st.path] * st.count)
+                    human_size(size_cache[st.path] * st.count, out_unit=out_unit)
                 )
                 if size_cache.get(st.path) is not None
                 else "MISSING"
@@ -630,7 +650,7 @@ def main(argv: Sequence[str]) -> int:
     else:
         top_size_cache = build_size_cache(top, show_progress=show_progress)
 
-    rows = to_rows(top, top_size_cache, show_bytes=args.show_bytes)
+    rows = to_rows(top, top_size_cache, out_unit=args.out_unit)
 
     columns = output_columns(show_dates=args.show_dates)
     output_rows = [{k: row[k] for k in columns} for row in rows]
