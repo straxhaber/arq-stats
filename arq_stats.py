@@ -189,7 +189,7 @@ def matches_plan_filter(plan_value: str, plan_filter: str, filter_is_guid: bool)
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    class _DefaultsFormatter(argparse.HelpFormatter):
+    class _DefaultsFormatter(argparse.RawDescriptionHelpFormatter):
         def _get_help_string(self, action: argparse.Action) -> str:
             text = action.help or ""
             if "%(default)" in text or "default:" in text.lower():
@@ -213,6 +213,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     filter_group = parser.add_argument_group("filters")
     display_group = parser.add_argument_group("display")
+    parser.add_argument_group(
+        "arg specs",
+        "- dates/times:    YYYY-MM-DD[ HH:MM] (ignores time zones)\n"
+        "- size units:     AUTO|B|K|M|G|T|P",
+    )
 
     parser.add_argument("--log-dir", metavar="DIR", type=Path, default=DEFAULT_LOG_DIR, help="Log directory")
 
@@ -223,7 +228,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         type=parse_user_datetime,
         dest="since_log",
         default=None,
-        help="Min log time (default: all; ignores time zones; YYYY-MM-DD[ HH:MM])",
+        help="Min log time (default: all; see arg specs)",
     )
     filter_group.add_argument(
         "--until-log",
@@ -231,14 +236,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         type=parse_user_datetime,
         dest="until_log",
         default=None,
-        help="Max log time (default: all; ignores time zones; YYYY-MM-DD[ HH:MM])",
+        help="Max log time (default: all; see arg specs)",
     )
     filter_group.add_argument(
         "--seen-since",
         metavar="DT",
         type=parse_user_datetime,
         default=None,
-        help="Min last-seen upload time (default: all; ignores time zones; YYYY-MM-DD[ HH:MM])",
+        help="Min last-seen upload time (default: all; see arg specs)",
     )
     filter_group.add_argument("--min-count", metavar="N", type=int, default=1, help="Min uploads (default: all)")
     filter_group.add_argument(
@@ -246,14 +251,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         metavar="SIZE",
         type=parse_size_bytes,
         default=None,
-        help="Min current size (default: off; B/K/M/G/T/P)",
+        help="Min current size (default: off)",
     )
     filter_group.add_argument(
         "--min-space",
         metavar="SIZE",
         type=parse_size_bytes,
         default=None,
-        help="Min size*count (default: off; B/K/M/G/T/P)",
+        help="Min size*count (default: off)",
     )
     filter_group.add_argument("--plan", metavar="PLAN", default=None, help="Backup plan name or GUID (default: all)")
     filter_group.add_argument("--include", metavar="REGEX", default=None, help="Include path regex (default: all)")
@@ -308,7 +313,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         metavar="UNIT",
         type=parse_out_unit,
         default="AUTO",
-        help="Output unit: AUTO|B|K|M|G|T|P (display only)",
+        help="Output unit (display only)",
     )
     display_group.add_argument(
         "--show-dates",
