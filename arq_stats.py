@@ -206,7 +206,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
     parser.add_argument("--log-dir", metavar="DIR", type=Path, default=DEFAULT_LOG_DIR, help="Log directory")
 
-    filter_group.add_argument("--max-logs", metavar="N", type=int, default=100, help="Search newest N logs (0=all; default: 100)")
+    filter_group.add_argument("--max-logs", metavar="N", type=int, default=1000, help="Search newest N logs (0=all; default: 1,000)")
     filter_group.add_argument(
         "--since",
         metavar="DATETIME",
