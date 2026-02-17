@@ -21,6 +21,7 @@ DEFAULT_LOG_DIR = Path("/Library/Application Support/ArqAgent/logs/backup")
 UPLOADED_PREFIX = "Uploaded "
 OUTPUT_COLUMNS = ["count", "size", "first_seen", "last_seen", "path"]
 RIGHT_ALIGN_COLUMNS = {"count", "size"}
+COLUMN_LABELS = {"count": "num"}
 LINE_RE = re.compile(
     r"^(?P<date>\d{2}-[A-Za-z]{3}-\d{4}) (?P<time>\d{2}:\d{2}:\d{2}) "
     r"(?P<tz>[A-Za-z]{2,6}(?:[+-]\d{1,2})?) (?P<message>.*)$"
@@ -265,13 +266,16 @@ def output_columns(show_dates: bool) -> list[str]:
 
 
 def render_table(rows: list[dict[str, str | int]], include_header: bool, columns: list[str]) -> str:
+    def label(col: str) -> str:
+        return COLUMN_LABELS.get(col, col)
+
     def display_value(row: dict[str, str | int], col: str) -> str:
         val = row[col]
         if col == "count" and isinstance(val, int):
             return f"{val:,}"
         return str(val)
 
-    widths = {c: len(c) for c in columns}
+    widths = {c: len(label(c)) for c in columns}
     for row in rows:
         for col in columns:
             widths[col] = max(widths[col], len(display_value(row, col)))
@@ -288,7 +292,7 @@ def render_table(rows: list[dict[str, str | int]], include_header: bool, columns
 
     lines: list[str] = []
     if include_header:
-        header = {c: c for c in columns}
+        header = {c: label(c) for c in columns}
         lines.append(fmt(header))
         lines.append("  ".join("-" * widths[c] for c in columns))
 
