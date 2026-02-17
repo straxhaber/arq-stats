@@ -23,6 +23,7 @@ BACKUP_PLAN_PREFIX = "Backup plan: "
 OUTPUT_COLUMNS = ["count", "size", "first_seen", "last_seen", "path"]
 RIGHT_ALIGN_COLUMNS = {"count", "size"}
 COLUMN_LABELS = {"count": "num"}
+PROGRESS_LABEL_WIDTH = 14
 LINE_RE = re.compile(
     r"^(?P<date>\d{2}-[A-Za-z]{3}-\d{4}) (?P<time>\d{2}:\d{2}:\d{2}) "
     r"(?P<tz>[A-Za-z]{2,6}(?:[+-]\d{1,2})?) (?P<message>.*)$"
@@ -353,7 +354,7 @@ def emit_progress_line(label: str, idx: int, total: int) -> None:
     width = 30
     filled = int((idx / total) * width) if total else width
     bar = "=" * filled + "." * (width - filled)
-    sys.stderr.write(f"\r{label} [{bar}] {idx:,}/{total:,}")
+    sys.stderr.write(f"\r{label:<{PROGRESS_LABEL_WIDTH}} [{bar}] {idx:,}/{total:,}")
     sys.stderr.flush()
 
 
