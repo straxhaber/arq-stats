@@ -19,6 +19,7 @@ from typing import Iterable, Sequence
 
 DEFAULT_LOG_DIR = Path("/Library/Application Support/ArqAgent/logs/backup")
 UPLOADED_PREFIX = "Uploaded "
+BACKUP_PLAN_PREFIX = "Backup plan: "
 OUTPUT_COLUMNS = ["count", "size", "first_seen", "last_seen", "path"]
 RIGHT_ALIGN_COLUMNS = {"count", "size"}
 COLUMN_LABELS = {"count": "num"}
@@ -27,6 +28,9 @@ LINE_RE = re.compile(
     r"(?P<tz>[A-Za-z]{2,6}(?:[+-]\d{1,2})?) (?P<message>.*)$"
 )
 LOG_NAME_RE = re.compile(r"^backup-(\d+)-")
+GUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 SIZE_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([BKMGTP]?)\s*$", re.IGNORECASE)
 SIZE_MULTIPLIERS = {
     "B": 1,
@@ -141,6 +145,38 @@ def compile_optional_regex(pattern: str | None, flag_name: str) -> re.Pattern[st
         raise ValueError(f"Invalid {flag_name} regex: {exc}") from exc
 
 
+def read_backup_plan(log_file: Path) -> str | None:
+    try:
+        with log_file.open("r", encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                parsed = parse_line(raw.rstrip("\n"))
+                if parsed is None:
+                    continue
+                _, message = parsed
+                if message.startswith(BACKUP_PLAN_PREFIX):
+                    return message[len(BACKUP_PLAN_PREFIX) :].strip() or None
+    except OSError:
+        return None
+    return None
+
+
+def parse_backup_plan(plan_value: str) -> tuple[str, str | None]:
+    plan_value = plan_value.strip()
+    if plan_value.endswith(")") and " (" in plan_value:
+        name, guid = plan_value.rsplit(" (", 1)
+        guid = guid[:-1].strip()
+        if GUID_RE.match(guid):
+            return name.strip(), guid
+    return plan_value, None
+
+
+def matches_plan_filter(plan_value: str, plan_filter: str, filter_is_guid: bool) -> bool:
+    name, guid = parse_backup_plan(plan_value)
+    if filter_is_guid:
+        return bool(guid and guid.lower() == plan_filter.lower())
+    return name.casefold() == plan_filter.casefold()
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     class _DefaultsFormatter(argparse.HelpFormatter):
         def _get_help_string(self, action: argparse.Action) -> str:
@@ -199,6 +235,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default=None,
         help="Min size*count (default: off; B/K/M/G/T/P)",
     )
+    filter_group.add_argument("--plan", metavar="PLAN", default=None, help="Backup plan name or GUID (default: all)")
     filter_group.add_argument("--include", metavar="REGEX", default=None, help="Include path regex (default: all)")
     filter_group.add_argument("--exclude", metavar="REGEX", default=None, help="Exclude path regex (default: all)")
 
@@ -426,6 +463,8 @@ def main(argv: Sequence[str]) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    plan_filter = args.plan.strip() if args.plan else None
+    filter_is_guid = bool(plan_filter and GUID_RE.match(plan_filter))
 
     files, skipped_unparseable = iter_log_files(args.log_dir, args.since, args.until)
     if args.max_logs > 0:
@@ -452,6 +491,17 @@ def main(argv: Sequence[str]) -> int:
 
     total_logs = len(files)
     for idx, log_file in enumerate(files, start=1):
+        if plan_filter is not None:
+            plan = read_backup_plan(log_file)
+            if not plan or not matches_plan_filter(plan, plan_filter, filter_is_guid):
+                if show_progress:
+                    width = 30
+                    filled = int((idx / total_logs) * width) if total_logs else width
+                    bar = "=" * filled + "." * (width - filled)
+                    sys.stderr.write(f"\rScanning logs [{bar}] {idx:,}/{total_logs:,}")
+                    sys.stderr.flush()
+                continue
+
         seen_paths_this_log: set[str] = set()
         try:
             with log_file.open("r", encoding="utf-8", errors="replace") as fh:
