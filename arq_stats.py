@@ -349,8 +349,27 @@ def get_current_size(path_text: str) -> int | None:
         return None
 
 
-def build_size_cache(stats: Iterable[FileStats]) -> dict[str, int | None]:
-    return {st.path: get_current_size(st.path) for st in stats}
+def emit_progress_line(label: str, idx: int, total: int) -> None:
+    width = 30
+    filled = int((idx / total) * width) if total else width
+    bar = "=" * filled + "." * (width - filled)
+    sys.stderr.write(f"\r{label} [{bar}] {idx:,}/{total:,}")
+    sys.stderr.flush()
+
+
+def build_size_cache(
+    stats: Iterable[FileStats], *, show_progress: bool = False, progress_label: str = "Checking sizes"
+) -> dict[str, int | None]:
+    stats_list = list(stats)
+    size_cache: dict[str, int | None] = {}
+    total = len(stats_list)
+    for idx, st in enumerate(stats_list, start=1):
+        size_cache[st.path] = get_current_size(st.path)
+        if show_progress:
+            emit_progress_line(progress_label, idx, total)
+    if show_progress and total:
+        sys.stderr.write("\n")
+    return size_cache
 
 
 def emit_table_output(text: str) -> None:
@@ -495,11 +514,7 @@ def main(argv: Sequence[str]) -> int:
             plan = read_backup_plan(log_file)
             if not plan or not matches_plan_filter(plan, plan_filter, filter_is_guid):
                 if show_progress:
-                    width = 30
-                    filled = int((idx / total_logs) * width) if total_logs else width
-                    bar = "=" * filled + "." * (width - filled)
-                    sys.stderr.write(f"\rScanning logs [{bar}] {idx:,}/{total_logs:,}")
-                    sys.stderr.flush()
+                    emit_progress_line("Scanning logs", idx, total_logs)
                 continue
 
         seen_paths_this_log: set[str] = set()
@@ -536,11 +551,7 @@ def main(argv: Sequence[str]) -> int:
             print(f"Warning: could not read {log_file}: {exc}", file=sys.stderr)
 
         if show_progress:
-            width = 30
-            filled = int((idx / total_logs) * width) if total_logs else width
-            bar = "=" * filled + "." * (width - filled)
-            sys.stderr.write(f"\rScanning logs [{bar}] {idx:,}/{total_logs:,}")
-            sys.stderr.flush()
+            emit_progress_line("Scanning logs", idx, total_logs)
 
     if show_progress:
         sys.stderr.write("\n")
@@ -551,7 +562,7 @@ def main(argv: Sequence[str]) -> int:
     size_cache: dict[str, int | None] = {}
 
     if needs_size_cache:
-        size_cache = build_size_cache(filtered)
+        size_cache = build_size_cache(filtered, show_progress=show_progress)
 
     if args.min_size is not None:
         print(
@@ -599,7 +610,7 @@ def main(argv: Sequence[str]) -> int:
     if needs_size_cache:
         top_size_cache = {st.path: size_cache.get(st.path) for st in top}
     else:
-        top_size_cache = build_size_cache(top)
+        top_size_cache = build_size_cache(top, show_progress=show_progress)
 
     rows = to_rows(top, top_size_cache, show_bytes=args.show_bytes)
 
